@@ -1,0 +1,16 @@
+/**
+ * Role-based access control middleware
+ * @param  {...string} roles Allowed roles
+ */
+const allowRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res
+        .status(403)
+        .json({ message: "Access denied: insufficient permissions" });
+    }
+    next();
+  };
+};
+
+module.exports = allowRoles;
