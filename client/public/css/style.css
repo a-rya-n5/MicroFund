@@ -1,0 +1,151 @@
+/* ================================
+   MicroFund Design System
+   ================================ */
+
+/* CSS Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Root variables (Fintech palette) */
+:root {
+  --primary: #1f3c88;
+  --primary-dark: #162e66;
+  --accent: #4da3ff;
+
+  --bg-main: #f4f6fb;
+  --bg-card: #ffffff;
+
+  --text-main: #1a1a1a;
+  --text-muted: #6b7280;
+
+  --border-light: #e5e7eb;
+
+  --radius: 12px;
+  --shadow-soft: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+/* Body */
+body {
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* Center utility */
+.center-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Card container */
+.card {
+  background-color: var(--bg-card);
+  width: 100%;
+  max-width: 420px;
+  padding: 32px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Headings */
+.card h1 {
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+  color: var(--primary);
+}
+
+.card p.subtitle {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+/* Form elements */
+.form-group {
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+}
+
+input,
+select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--primary);
+}
+
+/* Buttons */
+button.primary-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+button.primary-btn:hover {
+  background-color: var(--primary-dark);
+}
+
+/* Links */
+.link {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.link a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* ================================
+   Dark Mode (future ready)
+   ================================ */
+
+body.dark {
+  background-color: #0f172a;
+  color: #e5e7eb;
+}
+
+body.dark .card {
+  background-color: #111827;
+}
+
+body.dark input,
+body.dark select {
+  background-color: #0f172a;
+  color: #e5e7eb;
+  border-color: #374151;
+}
+
+body.dark label,
+body.dark p.subtitle {
+  color: #9ca3af;
+}
