@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MicroFund | Borrower Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===============================
+       BASE
+       =============================== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(79,70,229,0.18), transparent 40%),
+        radial-gradient(circle at bottom right, rgba(14,165,233,0.18), transparent 40%),
+        #020617;
+      color: #e5e7eb;
+    }
+
+    /* ===============================
+       LAYOUT
+       =============================== */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ===============================
+       SIDEBAR
+       =============================== */
+    .sidebar {
+      background: rgba(255,255,255,0.05);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      padding: 28px 22px;
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #818cf8, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 40px;
+    }
+
+    .nav a {
+      display: block;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      border-radius: 12px;
+      color: #c7d2fe;
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.25s ease;
+    }
+
+    .nav a.active,
+    .nav a:hover {
+      background: rgba(99,102,241,0.18);
+      color: #fff;
+    }
+
+    .logout {
+      margin-top: 40px;
+      padding: 12px;
+      width: 100%;
+      border-radius: 12px;
+      border: none;
+      font-weight: 600;
+      background: linear-gradient(90deg, #f43f5e, #fb7185);
+      color: #020617;
+      cursor: pointer;
+    }
+
+    /* ===============================
+       MAIN
+       =============================== */
+    .main {
+      padding: 34px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+
+    .header h1 {
+      font-size: 1.9rem;
+      font-weight: 700;
+    }
+
+    /* ===============================
+       STATS
+       =============================== */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 22px;
+      margin-bottom: 36px;
+    }
+
+    .stat-card {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      animation: rise 0.8s ease forwards;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(25px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .stat-title {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #a5b4fc, #7dd3fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ===============================
+       LOAN SECTION
+       =============================== */
+    .section {
+      margin-top: 30px;
+    }
+
+    .section h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .loan-card {
+      background: rgba(255,255,255,0.07);
+      border-radius: 18px;
+      padding: 26px;
+      border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 25px 70px rgba(0,0,0,0.45);
+    }
+
+    .loan-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .loan-item {
+      background: rgba(255,255,255,0.05);
+      border-radius: 14px;
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .loan-item span {
+      display: block;
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+
+    .loan-item strong {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .pay-btn {
+      margin-top: 22px;
+      padding: 14px;
+      width: 100%;
+      border-radius: 14px;
+      border: none;
+      font-weight: 700;
+      font-size: 1rem;
+      background: linear-gradient(90deg, #22c55e, #4ade80);
+      color: #020617;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .pay-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 40px rgba(34,197,94,0.4);
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="dashboard">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">MicroFund</div>
+
+    <nav class="nav">
+      <a class="active">Dashboard</a>
+      <a>My Loans</a>
+      <a>Repayments</a>
+      <a>Credit Score</a>
+    </nav>
+
+    <button class="logout" onclick="logout()">Logout</button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <div class="header">
+      <h1>Borrower Overview</h1>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-title">Wallet Balance</div>
+        <div class="stat-value">₹1,50,000</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-title">Active Loan</div>
+        <div class="stat-value">₹50,000</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-title">Monthly EMI</div>
+        <div class="stat-value">₹4,442</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-title">Credit Score</div>
+        <div class="stat-value">650</div>
+      </div>
+    </div>
+
+    <!-- LOAN DETAILS -->
+    <section class="section">
+      <h2>Current Loan Details</h2>
+
+      <div class="loan-card">
+        <div class="loan-grid">
+          <div class="loan-item">
+            <span>Loan Amount</span>
+            <strong>₹50,000</strong>
+          </div>
+
+          <div class="loan-item">
+            <span>Interest Rate</span>
+            <strong>12%</strong>
+          </div>
+
+          <div class="loan-item">
+            <span>Tenure</span>
+            <strong>12 months</strong>
+          </div>
+
+          <div class="loan-item">
+            <span>Status</span>
+            <strong>FUNDED</strong>
+          </div>
+        </div>
+
+        <button class="pay-btn">
+          Pay EMI
+        </button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  function logout() {
+    localStorage.removeItem("token");
+    window.location.href = "index.html";
+  }
+</script>
+
+</body>
+</html>

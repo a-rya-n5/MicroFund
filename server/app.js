@@ -6,6 +6,7 @@ const testRoutes = require("./routes/testRoutes");
 const loanRoutes = require("./routes/loanRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const creditRoutes = require("./routes/creditRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/test", testRoutes);
 app.use("/api/loans", loanRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/credit", creditRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Health check
 app.get("/", (req, res) => {

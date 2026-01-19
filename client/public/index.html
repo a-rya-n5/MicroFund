@@ -219,6 +219,8 @@
 
   </div>
 
+  <script src="js/role-router.js"></script>
+
   <script>
     const API_BASE = "http://localhost:5000/api";
 
@@ -243,7 +245,7 @@
         }
 
         localStorage.setItem("token", data.token);
-        window.location.href = "dashboard.html";
+        redirectByRole();
       } catch {
         alert("Server not reachable");
       }
