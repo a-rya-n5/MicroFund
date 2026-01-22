@@ -1,3 +1,18 @@
+// ADMIN PAGE GUARD
+const token = localStorage.getItem("token");
+
+if (!token) {
+  window.location.href = "index.html";
+}
+
+const payload = JSON.parse(atob(token.split(".")[1]));
+
+if (payload.role !== "admin") {
+  alert("Access denied: insufficient permissions");
+  localStorage.clear();
+  window.location.href = "index.html";
+}
+
 async function loadAdminDashboard() {
   try {
     // Fetch stats

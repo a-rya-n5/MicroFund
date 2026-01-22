@@ -24,35 +24,21 @@ function parseJwt(token) {
 
 function redirectByRole() {
   const token = localStorage.getItem("token");
-
   if (!token) {
     window.location.href = "index.html";
     return;
   }
 
-  const payload = parseJwt(token);
+  const payload = JSON.parse(atob(token.split(".")[1]));
 
-  if (!payload || !payload.role) {
-    localStorage.removeItem("token");
+  if (payload.role === "admin") {
+    window.location.href = "admin-dashboard.html";
+  } else if (payload.role === "borrower") {
+    window.location.href = "borrower-dashboard.html";
+  } else if (payload.role === "lender") {
+    window.location.href = "lender-dashboard.html";
+  } else {
+    localStorage.clear();
     window.location.href = "index.html";
-    return;
-  }
-
-  switch (payload.role) {
-    case "borrower":
-      window.location.href = "borrower-dashboard.html";
-      break;
-
-    case "lender":
-      window.location.href = "lender-dashboard.html";
-      break;
-
-    case "admin":
-      window.location.href = "admin-dashboard.html";
-      break;
-
-    default:
-      localStorage.removeItem("token");
-      window.location.href = "index.html";
   }
 }
