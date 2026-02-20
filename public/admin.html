@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — MicroFund</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="page-bg"></div>
+<div class="app-layout">
+  <div id="sidebarContainer"></div>
+  <div class="main-content">
+    <div id="topbarContainer"></div>
+    <div class="page-content">
+      <div class="page-header flex-between mb-24">
+        <div><h1 class="page-title">Admin Panel <span class="admin-badge">Admin</span></h1><div class="page-subtitle">Platform management and oversight controls</div></div>
+      </div>
+      <div class="tab-group" style="max-width:360px;margin-bottom:20px">
+        <button class="tab-btn active" id="loansTabBtn" onclick="setAdminTab('loans',this)">📋 Loan Review</button>
+        <button class="tab-btn" id="usersTabBtn" onclick="setAdminTab('users',this)">👥 Users</button>
+      </div>
+      <div class="filter-bar mb-24" id="adminFilterBar">
+        <button class="filter-chip active" onclick="setLoanFilter('pending',this)">⏳ Pending</button>
+        <button class="filter-chip" onclick="setLoanFilter('approved',this)">✅ Approved</button>
+        <button class="filter-chip" onclick="setLoanFilter('active',this)">🟢 Active</button>
+        <button class="filter-chip" onclick="setLoanFilter('completed',this)">🏁 Completed</button>
+        <button class="filter-chip" onclick="setLoanFilter('rejected',this)">❌ Rejected</button>
+        <button class="filter-chip" onclick="setLoanFilter('',this)">All</button>
+      </div>
+      <div id="adminContent"><div class="loading-state"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="loanActionModal">
+  <div class="modal modal-md">
+    <div class="modal-header">
+      <div class="modal-title" id="loanActionTitle">Loan Review</div>
+      <button class="modal-close" onclick="Modal.close('loanActionModal')">✕</button>
+    </div>
+    <div class="modal-body" id="loanActionBody"></div>
+  </div>
+</div>
+
+<div id="emiModalContainer"></div>
+<div class="toast-container"></div>
+<script src="/js/common.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+let currentUser = null, adminTab = 'loans', loanFilter = 'pending', allUsers = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  currentUser = initPage('admin');
+  if (!currentUser) return;
+  if (currentUser.role !== 'admin') { window.location.href = '/dashboard.html'; return; }
+
+  document.getElementById('sidebarContainer').innerHTML = getSidebarHTML();
+  document.getElementById('topbarContainer').innerHTML = getTopbarHTML('Admin Panel');
+  document.getElementById('emiModalContainer').innerHTML = getEMIModalHTML();
+  initPageControls('admin');
+  Modal.closeOnOverlay('loanActionModal');
+  Modal.closeOnOverlay('emiCalcModal');
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('tab') === 'users') { adminTab = 'users'; document.getElementById('loansTabBtn').classList.remove('active'); document.getElementById('usersTabBtn').classList.add('active'); document.getElementById('adminFilterBar').style.display = 'none'; }
+  if (params.get('status')) { loanFilter = params.get('status'); document.querySelectorAll('#adminFilterBar .filter-chip').forEach((b,i) => { b.classList.remove('active'); if(b.textContent.toLowerCase().includes(loanFilter)) b.classList.add('active'); }); }
+
+  await loadAdminContent();
+  refreshWalletDisplay();
+});
+
+function setAdminTab(tab, btn) {
+  adminTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('adminFilterBar').style.display = tab === 'loans' ? 'flex' : 'none';
+  loadAdminContent();
+}
+
+function setLoanFilter(filter, btn) {
+  loanFilter = filter;
+  document.querySelectorAll('#adminFilterBar .filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAdminContent();
+}
+
+async function loadAdminContent() {
+  adminTab === 'loans' ? await loadAdminLoans() : await loadAdminUsers();
+}
+
+async function loadAdminLoans() {
+  const container = document.getElementById('adminContent');
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+  const res = await api.get('/admin/loans' + (loanFilter ? '?status='+loanFilter : ''));
+  if (!res.ok) { container.innerHTML = '<div class="empty-state"><div class="empty-state-title">Failed to load</div></div>'; return; }
+  const loans = res.data.loans || [];
+  if (!loans.length) { container.innerHTML = '<div class="card"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No '+(loanFilter||'')+' loans found</div></div></div>'; return; }
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header"><div><div class="card-title">Loan Applications</div><div class="card-subtitle">${loans.length} loans · ${loanFilter||'all'} status</div></div></div>
+      <div class="card-body" style="padding:0"><div class="table-wrapper"><table>
+        <thead><tr><th>Borrower</th><th>Amount</th><th>Rate/Tenure</th><th>Purpose</th><th>Risk</th><th>Credit</th><th>Status</th><th>Applied</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${loans.map(loan=>`<tr>
+            <td>
+              <strong>${loan.borrower?.name||'—'}</strong>
+              <div style="font-size:11px;color:var(--text-muted)">${loan.borrower?.email||''}</div>
+              <span style="font-size:10px;color:${loan.borrower?.verified?'var(--success)':'var(--danger)'}">${loan.borrower?.verified?'✓ Verified':'✗ Unverified'}</span>
+            </td>
+            <td class="mono">${Format.currency(loan.amount)}</td>
+            <td>${loan.interestRate}% · ${loan.tenure}mo</td>
+            <td style="max-width:130px;font-size:13px">${loan.purpose}</td>
+            <td>${Badge.risk(loan.riskScore)}</td>
+            <td><span style="color:${Format.creditRating(loan.borrower?.creditScore||650).color};font-weight:700">${loan.borrower?.creditScore||650}</span></td>
+            <td>${Badge.status(loan.status)}</td>
+            <td style="font-size:12px">${Format.date(loan.createdAt)}</td>
+            <td>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn btn-ghost btn-sm" onclick="viewLoanAdmin('${loan._id}')">View</button>
+                ${loan.status==='pending'?`<button class="btn btn-success btn-sm" onclick="approveLoan('${loan._id}')">✓</button><button class="btn btn-danger btn-sm" onclick="rejectLoan('${loan._id}')">✗</button>`:''}
+                ${loan.status==='approved'?`<button class="btn btn-danger btn-sm" onclick="rejectLoan('${loan._id}')">Reject</button>`:''}
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+async function loadAdminUsers() {
+  const container = document.getElementById('adminContent');
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+  const res = await api.get('/admin/users');
+  if (!res.ok) { container.innerHTML = '<div class="empty-state"><div class="empty-state-title">Failed</div></div>'; return; }
+  allUsers = res.data.users || [];
+  renderUsersTable(allUsers);
+}
+
+function renderUsersTable(users) {
+  document.getElementById('adminContent').innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <div><div class="card-title">All Users</div><div class="card-subtitle">${users.length} registered</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="filter-chip active" onclick="filterUsers('all',this)">All</button>
+          <button class="filter-chip" onclick="filterUsers('borrower',this)">Borrowers</button>
+          <button class="filter-chip" onclick="filterUsers('lender',this)">Lenders</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0"><div class="table-wrapper"><table>
+        <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Credit</th><th>Wallet</th><th>Verified</th><th>Joined</th><th>Actions</th></tr></thead>
+        <tbody id="usersTableBody">${renderUserRows(allUsers)}</tbody>
+      </table></div></div>
+    </div>
+  `;
+}
+
+function renderUserRows(users) {
+  return users.map(user=>`<tr>
+    <td>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-dark));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--navy);flex-shrink:0">${user.name.charAt(0)}</div>
+        <strong>${user.name}</strong>
+      </div>
+    </td>
+    <td><span class="badge badge-${user.role==='admin'?'completed':user.role==='lender'?'approved':'pending'}">${user.role}</span></td>
+    <td style="font-size:12px">${user.email}</td>
+    <td><span style="color:${Format.creditRating(user.creditScore).color};font-weight:700">${user.creditScore}</span></td>
+    <td class="mono">${Format.currency(user.wallet)}</td>
+    <td><span style="color:${user.verified?'var(--success)':'var(--danger)'}">${user.verified?'✓ Verified':'✗ Pending'}</span></td>
+    <td style="font-size:12px">${Format.date(user.createdAt)}</td>
+    <td>${user.role!=='admin'?`<button class="btn ${user.verified?'btn-danger':'btn-success'} btn-sm" onclick="toggleVerify('${user._id}',${!user.verified})">${user.verified?'Revoke':'Verify'}</button>`:'<span class="admin-badge">Admin</span>'}</td>
+  </tr>`).join('');
+}
+
+function filterUsers(role, btn) {
+  document.querySelectorAll('.card .filter-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = role==='all' ? allUsers : allUsers.filter(u=>u.role===role);
+  document.getElementById('usersTableBody').innerHTML = renderUserRows(filtered);
+}
+
+async function toggleVerify(userId, verified) {
+  const res = await api.put('/admin/users/'+userId+'/verify', {verified});
+  if (res.ok) { Toast.success(verified?'User verified':'Verification revoked',''); await loadAdminUsers(); }
+  else Toast.error('Failed', res.data.message);
+}
+
+async function viewLoanAdmin(loanId) {
+  Modal.open('loanActionModal');
+  document.getElementById('loanActionBody').innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+  const res = await api.get('/loans/'+loanId);
+  if (!res.ok) { document.getElementById('loanActionBody').innerHTML = '<div class="empty-state"><div class="empty-state-title">Failed</div></div>'; return; }
+  const loan = res.data.loan;
+  document.getElementById('loanActionTitle').textContent = 'Review: ' + loan.purpose;
+  document.getElementById('loanActionBody').innerHTML = `
+    <div class="grid-2" style="margin-bottom:16px">
+      <div>
+        <div class="info-row"><span class="info-label">Borrower</span><span class="info-value">${loan.borrower?.name||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Email</span><span class="info-value" style="font-size:12px">${loan.borrower?.email||'—'}</span></div>
+        <div class="info-row"><span class="info-label">Credit Score</span><span class="info-value" style="color:${Format.creditRating(loan.borrower?.creditScore||650).color}">${loan.borrower?.creditScore||650}</span></div>
+        <div class="info-row"><span class="info-label">Verified</span><span class="info-value" style="color:${loan.borrower?.verified?'var(--success)':'var(--danger)'}">${loan.borrower?.verified?'Yes':'No'}</span></div>
+      </div>
+      <div>
+        <div class="info-row"><span class="info-label">Amount</span><span class="info-value">${Format.currency(loan.amount)}</span></div>
+        <div class="info-row"><span class="info-label">Rate</span><span class="info-value">${loan.interestRate}% p.a.</span></div>
+        <div class="info-row"><span class="info-label">Tenure</span><span class="info-value">${loan.tenure} months</span></div>
+        <div class="info-row"><span class="info-label">EMI</span><span class="info-value" style="color:var(--gold)">${Format.currency(loan.emi)}/mo</span></div>
+        <div class="info-row"><span class="info-label">Total Payable</span><span class="info-value">${Format.currency(loan.totalPayable)}</span></div>
+        <div class="info-row"><span class="info-label">Risk</span><span class="info-value">${Badge.risk(loan.riskScore)}</span></div>
+      </div>
+    </div>
+    <div class="info-row"><span class="info-label">Purpose</span><span class="info-value">${loan.purpose}</span></div>
+    ${loan.description?`<div class="info-row"><span class="info-label">Description</span><span class="info-value" style="font-size:12px">${loan.description}</span></div>`:''}
+    <div class="info-row"><span class="info-label">Status</span><span class="info-value">${Badge.status(loan.status)}</span></div>
+    ${loan.status==='pending'||loan.status==='approved'?`
+      <div style="margin-top:20px">
+        <div class="form-group"><label class="form-label">Admin Note (Optional)</label><textarea id="adminNoteInput" class="form-input" rows="2" placeholder="Note for borrower..."></textarea></div>
+        <div style="display:flex;gap:12px">
+          ${loan.status==='pending'?`<button class="btn btn-success w-full btn-lg" onclick="approveLoanModal('${loan._id}')">✓ Approve Loan</button>`:''}
+          <button class="btn btn-danger w-full btn-lg" onclick="rejectLoanModal('${loan._id}')">✗ Reject Loan</button>
+        </div>
+      </div>
+    `:''}
+  `;
+}
+
+async function approveLoan(loanId) {
+  if (!confirm('Approve this loan? It will be visible to lenders.')) return;
+  const res = await api.put('/admin/loans/'+loanId+'/approve', {adminNote:''});
+  if (res.ok) { Toast.success('Loan approved! ✅','Borrower notified, visible to lenders'); await loadAdminContent(); }
+  else Toast.error('Failed', res.data.message);
+}
+
+async function approveLoanModal(loanId) {
+  const note = document.getElementById('adminNoteInput')?.value || '';
+  const res = await api.put('/admin/loans/'+loanId+'/approve', {adminNote:note});
+  if (res.ok) { Toast.success('Loan approved! ✅',''); Modal.close('loanActionModal'); await loadAdminContent(); }
+  else Toast.error('Failed', res.data.message);
+}
+
+async function rejectLoan(loanId) {
+  const reason = prompt('Rejection reason:') || 'Does not meet requirements';
+  const res = await api.put('/admin/loans/'+loanId+'/reject', {adminNote:reason});
+  if (res.ok) { Toast.success('Loan rejected','Borrower notified'); await loadAdminContent(); }
+  else Toast.error('Failed', res.data.message);
+}
+
+async function rejectLoanModal(loanId) {
+  const note = document.getElementById('adminNoteInput')?.value || 'Does not meet requirements';
+  const res = await api.put('/admin/loans/'+loanId+'/reject', {adminNote:note});
+  if (res.ok) { Toast.success('Loan rejected','Borrower notified'); Modal.close('loanActionModal'); await loadAdminContent(); }
+  else Toast.error('Failed', res.data.message);
+}
+</script>
+</body>
+</html>

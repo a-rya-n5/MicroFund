@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — MicroFund</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="page-bg"></div>
+<div class="app-layout">
+  <div id="sidebarContainer"></div>
+  <div class="main-content">
+    <div id="topbarContainer"></div>
+    <div class="page-content">
+      <div class="page-header">
+        <h1 class="page-title" id="dashboardTitle">Dashboard</h1>
+        <div class="page-subtitle" id="dashboardSubtitle">Welcome back!</div>
+      </div>
+      <div class="grid-4 mb-24" id="statsGrid">
+        <div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div></div>
+      </div>
+      <div id="dashboardMain"></div>
+    </div>
+  </div>
+</div>
+<div id="emiModalContainer"></div>
+<div class="toast-container"></div>
+<script src="/js/common.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+let currentUser = null;
+document.addEventListener('DOMContentLoaded', async () => {
+  currentUser = initPage('dashboard');
+  if (!currentUser) return;
+  document.getElementById('sidebarContainer').innerHTML = getSidebarHTML();
+  document.getElementById('topbarContainer').innerHTML = getTopbarHTML('Dashboard');
+  document.getElementById('emiModalContainer').innerHTML = getEMIModalHTML();
+  initPageControls('dashboard');
+  await loadDashboard();
+});
+
+async function loadDashboard() {
+  if (currentUser.role === 'admin') await loadAdminDashboard();
+  else if (currentUser.role === 'borrower') await loadBorrowerDashboard();
+  else await loadLenderDashboard();
+}
+
+async function loadBorrowerDashboard() {
+  document.getElementById('dashboardTitle').textContent = 'Good day, ' + currentUser.name.split(' ')[0] + '! 👋';
+  document.getElementById('dashboardSubtitle').textContent = 'Track your loans, payments, and credit health';
+  const [walletRes, loansRes, creditRes] = await Promise.all([
+    api.get('/users/wallet'), api.get('/loans?limit=10'), api.get('/users/credit-score')
+  ]);
+  const wallet = walletRes.data?.user || {};
+  const loans = loansRes.data?.loans || [];
+  const creditScore = creditRes.data?.creditScore || 650;
+  const creditRating = Format.creditRating(creditScore);
+  const activeLoans = loans.filter(l => l.status === 'active').length;
+  const completedLoans = loans.filter(l => l.status === 'completed').length;
+  const nextEMILoan = loans.find(l => l.status === 'active');
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card gold"><div class="stat-icon">💳</div><div class="stat-label">Wallet Balance</div><div class="stat-value">${Format.currency(wallet.wallet)}</div><div class="stat-change"><a href="/wallet.html" style="color:var(--gold);text-decoration:none">Top up →</a></div></div>
+    <div class="stat-card green"><div class="stat-icon">📋</div><div class="stat-label">Active Loans</div><div class="stat-value">${activeLoans}</div><div class="stat-change">${completedLoans} completed</div></div>
+    <div class="stat-card blue"><div class="stat-icon">💸</div><div class="stat-label">Total Borrowed</div><div class="stat-value">${Format.currency(wallet.totalBorrowed)}</div><div class="stat-change positive">${Format.currency(wallet.totalRepaid)} repaid</div></div>
+    <div class="stat-card"><div class="stat-icon">⭐</div><div class="stat-label">Credit Score</div><div class="stat-value" style="color:${creditRating.color}">${creditScore}</div><div class="stat-change" style="color:${creditRating.color}">${creditRating.label}</div></div>
+  `;
+
+  document.getElementById('dashboardMain').innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">My Loans</div><div class="card-subtitle">Recent loan activity</div></div>
+          <a href="/loans.html" class="btn btn-secondary btn-sm">View All</a>
+        </div>
+        <div class="card-body">
+          ${loans.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">No loans yet</div><div class="empty-state-text">Apply for your first micro-loan</div><a href="/loans.html?tab=apply" class="btn btn-primary btn-sm" style="margin-top:16px">Apply for Loan</a></div>` :
+          loans.slice(0,4).map(loan => `
+            <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div><div style="font-size:13px;font-weight:600;color:var(--text-primary)">${loan.purpose}</div><div style="font-size:11px;color:var(--text-muted)">${Format.date(loan.createdAt)}</div></div>
+                <div style="text-align:right"><div class="mono" style="font-size:14px;font-weight:700">${Format.currency(loan.amount)}</div>${Badge.status(loan.status)}</div>
+              </div>
+              ${loan.status==='active'&&loan.totalPayable?`<div class="progress-bar"><div class="progress-fill" style="width:${Math.round((loan.paidAmount/loan.totalPayable)*100)}%"></div></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">${Math.round((loan.paidAmount/loan.totalPayable)*100)}% repaid · EMI ${Format.currency(loan.emi)}/mo</div>`:''}
+            </div>
+          `).join('') + `<a href="/loans.html?tab=apply" class="btn btn-primary w-full" style="margin-top:16px">➕ Apply for New Loan</a>`}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Credit Health</div><div class="card-subtitle">Your creditworthiness score</div></div>
+          <a href="/credit.html" class="btn btn-ghost btn-sm">Details →</a>
+        </div>
+        <div class="card-body">
+          <div style="text-align:center;padding:16px 0">
+            <svg width="160" height="160" viewBox="0 0 160 160" style="transform:rotate(-90deg)">
+              <circle cx="80" cy="80" r="60" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="12"/>
+              <circle cx="80" cy="80" r="60" fill="none" stroke="${creditRating.color}" stroke-width="12" stroke-dasharray="${((creditScore-300)/550)*376.99} 376.99" stroke-linecap="round"/>
+            </svg>
+            <div style="margin-top:-96px;position:relative;padding-bottom:16px">
+              <div style="font-family:'Fraunces',serif;font-size:36px;font-weight:900;color:${creditRating.color}">${creditScore}</div>
+              <div style="font-size:12px;color:var(--text-muted)">out of 850</div>
+              <div style="font-size:14px;font-weight:700;color:${creditRating.color};margin-top:4px">${creditRating.label}</div>
+            </div>
+          </div>
+          ${nextEMILoan ? `
+            <div style="background:rgba(212,168,83,0.08);border:1px solid rgba(212,168,83,0.2);border-radius:12px;padding:14px;margin-top:8px">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">NEXT EMI DUE</div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div><div class="mono" style="font-size:20px;font-weight:700;color:var(--gold)">${Format.currency(nextEMILoan.emi)}</div><div style="font-size:11px;color:var(--text-muted)">${nextEMILoan.purpose}</div></div>
+                <a href="/loans.html" class="btn btn-primary btn-sm">Pay EMI</a>
+              </div>
+            </div>
+          ` : `<a href="/credit.html" class="btn btn-secondary w-full" style="margin-top:8px">⭐ View Score Details</a>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadLenderDashboard() {
+  document.getElementById('dashboardTitle').textContent = 'Welcome, ' + currentUser.name.split(' ')[0] + '! 💰';
+  document.getElementById('dashboardSubtitle').textContent = 'Monitor your portfolio and funding activity';
+  const [walletRes, availableRes, allLoansRes] = await Promise.all([
+    api.get('/users/wallet'), api.get('/loans?status=approved&limit=3'), api.get('/loans?status=active,completed&limit=20')
+  ]);
+  const wallet = walletRes.data?.user || {};
+  const available = availableRes.data?.loans || [];
+  const allLoans = allLoansRes.data?.loans || [];
+  const myLoans = allLoans.filter(l => l.lender && (l.lender._id===currentUser.id||l.lender===currentUser.id));
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card gold"><div class="stat-icon">💳</div><div class="stat-label">Available Balance</div><div class="stat-value">${Format.currency(wallet.wallet)}</div><div class="stat-change"><a href="/wallet.html" style="color:var(--gold);text-decoration:none">Add funds →</a></div></div>
+    <div class="stat-card blue"><div class="stat-icon">💰</div><div class="stat-label">Total Funded</div><div class="stat-value">${Format.currency(wallet.totalFunded)}</div><div class="stat-change">${myLoans.length} loans</div></div>
+    <div class="stat-card green"><div class="stat-icon">📈</div><div class="stat-label">Total Returns</div><div class="stat-value">${Format.currency(wallet.totalReturns)}</div><div class="stat-change positive">EMIs received</div></div>
+    <div class="stat-card"><div class="stat-icon">🔍</div><div class="stat-label">Available Loans</div><div class="stat-value">${available.length}</div><div class="stat-change"><a href="/loans.html" style="color:var(--gold);text-decoration:none">Browse →</a></div></div>
+  `;
+
+  document.getElementById('dashboardMain').innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Available to Fund</div><div class="card-subtitle">Admin-approved loan requests</div></div>
+          <a href="/loans.html" class="btn btn-secondary btn-sm">Browse All</a>
+        </div>
+        <div class="card-body">
+          ${available.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-title">No loans available right now</div></div>` :
+          available.map(loan => `
+            <div style="padding:14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:12px;margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                <div><div style="font-size:14px;font-weight:700;color:var(--text-primary)">${Format.currency(loan.amount)}</div><div style="font-size:12px;color:var(--text-muted)">${loan.purpose}</div></div>
+                <div style="text-align:right"><div style="font-size:13px;font-weight:700;color:var(--gold)">${loan.interestRate}% p.a.</div>${Badge.risk(loan.riskScore)}</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:10px">
+                <span>EMI: <span class="mono" style="color:var(--text-primary)">${Format.currency(loan.emi)}/mo</span></span>
+                <span>${loan.tenure} months</span>
+                <span>Credit: <span style="color:${Format.creditRating(loan.borrower?.creditScore||650).color}">${loan.borrower?.creditScore||650}</span></span>
+              </div>
+              <button onclick="quickFund('${loan._id}',${loan.amount})" class="btn btn-primary btn-sm w-full">Fund This Loan</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">My Portfolio</div><div class="card-subtitle">Funded loans performance</div></div>
+          <a href="/loans.html?tab=funded" class="btn btn-ghost btn-sm">View All</a>
+        </div>
+        <div class="card-body">
+          ${myLoans.length === 0 ? `<div class="empty-state"><div class="empty-state-icon">💼</div><div class="empty-state-title">No funded loans yet</div><a href="/loans.html" class="btn btn-primary btn-sm" style="margin-top:16px">Browse Loans →</a></div>` :
+          myLoans.slice(0,5).map(loan => `
+            <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <div><div style="font-size:13px;font-weight:600;color:var(--text-primary)">${loan.borrower?.name||'Borrower'}</div><div style="font-size:11px;color:var(--text-muted)">${loan.purpose}</div></div>
+                <div style="text-align:right"><div class="mono" style="font-size:13px;font-weight:700">${Format.currency(loan.amount)}</div>${Badge.status(loan.status)}</div>
+              </div>
+              ${(loan.status==='active'||loan.status==='completed')&&loan.totalPayable?`<div class="progress-bar"><div class="progress-fill" style="width:${Math.round((loan.paidAmount/loan.totalPayable)*100)}%"></div></div><div style="font-size:10px;color:var(--text-muted);margin-top:2px">${Format.currency(loan.paidAmount)} received</div>`:''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function loadAdminDashboard() {
+  document.getElementById('dashboardTitle').textContent = 'Admin Dashboard';
+  document.getElementById('dashboardSubtitle').textContent = 'Platform overview and management controls';
+  const res = await api.get('/admin/stats');
+  if (!res.ok) { Toast.error('Failed to load stats'); return; }
+  const stats = res.data.stats;
+  const pendingLoans = stats.loanStats.find(s=>s._id==='pending')?.count||0;
+  const activeLoans = stats.loanStats.find(s=>s._id==='active')?.count||0;
+  const approvedLoans = stats.loanStats.find(s=>s._id==='approved')?.count||0;
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card gold"><div class="stat-icon">👥</div><div class="stat-label">Total Users</div><div class="stat-value">${stats.totalUsers}</div><div class="stat-change">${stats.totalBorrowers} borrowers · ${stats.totalLenders} lenders</div></div>
+    <div class="stat-card blue"><div class="stat-icon">📋</div><div class="stat-label">Total Loans</div><div class="stat-value">${stats.totalLoans}</div><div class="stat-change" style="color:var(--warning)">${pendingLoans} pending review</div></div>
+    <div class="stat-card green"><div class="stat-icon">💸</div><div class="stat-label">Total Disbursed</div><div class="stat-value">${Format.currency(stats.totalDisbursed)}</div><div class="stat-change positive">${activeLoans} active loans</div></div>
+    <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-label">Total Repaid</div><div class="stat-value">${Format.currency(stats.totalRepaid)}</div><div class="stat-change positive">Flowing through platform</div></div>
+  `;
+
+  document.getElementById('dashboardMain').innerHTML = `
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Quick Actions</div></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <a href="/admin.html" class="btn btn-secondary" style="flex-direction:column;height:90px;justify-content:center;text-align:center"><span style="font-size:28px">⏳</span><span style="font-size:12px;margin-top:6px;font-weight:700">${pendingLoans} Pending</span></a>
+          <a href="/admin.html?status=approved" class="btn btn-ghost" style="flex-direction:column;height:90px;justify-content:center;text-align:center"><span style="font-size:28px">✅</span><span style="font-size:12px;margin-top:6px">${approvedLoans} Approved</span></a>
+          <a href="/admin.html?tab=users" class="btn btn-ghost" style="flex-direction:column;height:90px;justify-content:center;text-align:center"><span style="font-size:28px">👥</span><span style="font-size:12px;margin-top:6px">Manage Users</span></a>
+          <a href="/admin.html" class="btn btn-ghost" style="flex-direction:column;height:90px;justify-content:center;text-align:center"><span style="font-size:28px">🔧</span><span style="font-size:12px;margin-top:6px">Admin Panel</span></a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Recent Transactions</div></div>
+        <div class="card-body" style="padding-top:8px">
+          ${stats.recentTransactions.slice(0,6).map(t=>`
+            <div class="txn-item">
+              <div class="txn-icon ${t.direction}">${t.direction==='credit'?'⬆️':'⬇️'}</div>
+              <div class="txn-info"><div class="txn-desc">${t.description}</div><div class="txn-date">${t.user?.name||'—'} · ${Format.timeAgo(t.createdAt)}</div></div>
+              <div class="txn-amount ${t.direction}">${t.direction==='credit'?'+':'-'}${Format.currency(t.amount)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function quickFund(loanId, amount) {
+  const r = await api.get('/users/wallet');
+  if ((r.data?.wallet||0) < amount) { Toast.error('Insufficient balance', 'Add funds to your wallet first'); return; }
+  if (!confirm('Fund this loan for ' + Format.currency(amount) + '?')) return;
+  const res = await api.post('/loans/'+loanId+'/fund');
+  if (res.ok) { Toast.success('Loan funded! 🎉', 'EMIs will credit to your wallet'); await loadDashboard(); refreshWalletDisplay(); }
+  else Toast.error('Failed', res.data.message);
+}
+</script>
+</body>
+</html>

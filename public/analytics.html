@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — MicroFund</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .metric-card { background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:20px;position:relative;overflow:hidden; }
+    .metric-card::before { content:'';position:absolute;top:0;right:0;width:80px;height:80px;border-radius:0 16px 0 80px;opacity:0.06; }
+    .metric-card.gold::before { background:var(--gold); }
+    .metric-card.green::before { background:var(--success); }
+    .metric-card.blue::before { background:#3B82F6; }
+    .metric-card.purple::before { background:#A855F7; }
+    .metric-label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:8px; }
+    .metric-value { font-family:'Fraunces',serif;font-size:30px;font-weight:900;color:var(--text-primary);margin-bottom:4px; }
+    .metric-change { font-size:12px;display:flex;align-items:center;gap:4px; }
+    .metric-change.up { color:var(--success); }
+    .metric-change.down { color:var(--danger); }
+    .chart-card { background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:20px; }
+    .chart-title { font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:4px; }
+    .chart-subtitle { font-size:12px;color:var(--text-muted);margin-bottom:20px; }
+    .chart-container { position:relative;height:220px; }
+    .insight-item { display:flex;align-items:flex-start;gap:12px;padding:14px 0;border-bottom:1px solid var(--border); }
+    .insight-item:last-child { border:none; }
+    .insight-icon { width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0; }
+    .insight-icon.gold { background:rgba(212,168,83,0.12); }
+    .insight-icon.green { background:rgba(34,197,94,0.12); }
+    .insight-icon.blue { background:rgba(59,130,246,0.12); }
+    .insight-icon.red { background:rgba(239,68,68,0.12); }
+    .insight-title { font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:2px; }
+    .insight-desc { font-size:12px;color:var(--text-muted); }
+    .pill-tabs { display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap; }
+    .pill-tab { padding:4px 12px;border-radius:100px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;transition:all 0.2s;font-family:inherit; }
+    .pill-tab.active { background:var(--gold);border-color:var(--gold);color:var(--navy);font-weight:700; }
+    .donut-legend { display:flex;flex-direction:column;gap:10px; }
+    .legend-item { display:flex;align-items:center;gap:10px; }
+    .legend-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+    .legend-label { font-size:12px;color:var(--text-secondary);flex:1; }
+    .legend-val { font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text-primary); }
+  </style>
+</head>
+<body>
+<div class="page-bg"></div>
+<div class="app-layout">
+  <div id="sidebarContainer"></div>
+  <div class="main-content">
+    <div id="topbarContainer"></div>
+    <div class="page-content">
+
+      <div class="page-header flex-between mb-24">
+        <div>
+          <h1 class="page-title">Analytics</h1>
+          <div class="page-subtitle" id="analyticsSubtitle">Your financial insights and performance metrics</div>
+        </div>
+        <div class="pill-tabs" id="periodTabs">
+          <button class="pill-tab" onclick="setPeriod('7d',this)">7 Days</button>
+          <button class="pill-tab active" onclick="setPeriod('30d',this)">30 Days</button>
+          <button class="pill-tab" onclick="setPeriod('90d',this)">90 Days</button>
+          <button class="pill-tab" onclick="setPeriod('all',this)">All Time</button>
+        </div>
+      </div>
+
+      <!-- KPI Metrics Row -->
+      <div class="grid-4 mb-24" id="kpiGrid">
+        <div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div></div>
+      </div>
+
+      <!-- Charts Row 1 -->
+      <div class="grid-2 mb-24">
+        <!-- Transaction Volume Chart -->
+        <div class="chart-card">
+          <div class="chart-title">Transaction Volume</div>
+          <div class="chart-subtitle">Credits vs Debits over time</div>
+          <div class="chart-container"><canvas id="volumeChart"></canvas></div>
+        </div>
+
+        <!-- Loan Status Donut -->
+        <div class="chart-card">
+          <div class="chart-title">Loan Portfolio Mix</div>
+          <div class="chart-subtitle">Distribution by status</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:center;height:220px">
+            <div class="chart-container" style="height:200px"><canvas id="loanDonut"></canvas></div>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row 2 -->
+      <div class="grid-2 mb-24">
+        <!-- EMI Repayment Trend -->
+        <div class="chart-card">
+          <div class="chart-title" id="chart2Title">Repayment Activity</div>
+          <div class="chart-subtitle" id="chart2Subtitle">Monthly payment flow</div>
+          <div class="chart-container"><canvas id="repaymentChart"></canvas></div>
+        </div>
+
+        <!-- Credit / Returns Gauge -->
+        <div class="chart-card">
+          <div class="chart-title" id="chart3Title">Performance Score</div>
+          <div class="chart-subtitle" id="chart3Subtitle">Key performance indicator</div>
+          <div class="chart-container"><canvas id="gaugeChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Insights + Top Stats Row -->
+      <div class="grid-2">
+        <!-- Insights -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">💡 AI Insights</div><div class="card-subtitle">Personalized financial advice</div></div>
+          <div class="card-body" id="insightsPanel">
+            <div class="loading-state"><div class="spinner"></div></div>
+          </div>
+        </div>
+
+        <!-- Top Activity -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">🔥 Recent Activity</div><div class="card-subtitle">Latest transactions</div></div>
+          <div class="card-body" id="activityPanel">
+            <div class="loading-state"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="emiModalContainer"></div>
+<div class="toast-container"></div>
+<script src="/js/common.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+let currentUser = null;
+let currentPeriod = '30d';
+let charts = {};
+
+document.addEventListener('DOMContentLoaded', async () => {
+  currentUser = initPage('analytics');
+  if (!currentUser) return;
+
+  document.getElementById('sidebarContainer').innerHTML = getSidebarHTML();
+  document.getElementById('topbarContainer').innerHTML = getTopbarHTML('Analytics');
+  document.getElementById('emiModalContainer').innerHTML = getEMIModalHTML();
+  initPageControls('analytics');
+  Modal.closeOnOverlay('emiCalcModal');
+
+  if (currentUser.role === 'admin') {
+    document.getElementById('analyticsSubtitle').textContent = 'Platform-wide performance and lending metrics';
+  } else if (currentUser.role === 'lender') {
+    document.getElementById('analyticsSubtitle').textContent = 'Portfolio performance and investment returns';
+  }
+
+  Chart.defaults.color = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#94A3B8';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+  Chart.defaults.font.family = "'DM Sans', sans-serif";
+
+  await loadAnalytics();
+  refreshWalletDisplay();
+});
+
+function setPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.pill-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAnalytics();
+}
+
+function destroyCharts() {
+  Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} });
+  charts = {};
+}
+
+async function loadAnalytics() {
+  destroyCharts();
+  document.getElementById('kpiGrid').innerHTML = '<div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div></div>';
+
+  const days = {
+    '7d': 7, '30d': 30, '90d': 90, 'all': 365
+  }[currentPeriod] || 30;
+
+  if (currentUser.role === 'admin') await loadAdminAnalytics(days);
+  else if (currentUser.role === 'lender') await loadLenderAnalytics(days);
+  else await loadBorrowerAnalytics(days);
+}
+
+// ========================
+// BORROWER ANALYTICS
+// ========================
+async function loadBorrowerAnalytics(days) {
+  const [walletRes, loansRes, txnRes, creditRes] = await Promise.all([
+    api.get('/users/wallet'),
+    api.get('/loans'),
+    api.get('/users/transactions?limit=100'),
+    api.get('/users/credit-score'),
+  ]);
+
+  const user = walletRes.data?.user || {};
+  const loans = loansRes.data?.loans || [];
+  const txns = txnRes.data?.transactions || [];
+  const creditScore = creditRes.data?.creditScore || 650;
+  const creditHistory = creditRes.data?.history || [];
+
+  const activeLoans = loans.filter(l => l.status === 'active');
+  const completedLoans = loans.filter(l => l.status === 'completed');
+  const totalPaid = txns.filter(t => t.type === 'emi_paid').reduce((s,t) => s+t.amount, 0);
+  const totalReceived = txns.filter(t => t.type === 'loan_received').reduce((s,t) => s+t.amount, 0);
+  const repaymentRate = totalReceived > 0 ? Math.round((totalPaid / totalReceived) * 100) : 0;
+  const cr = Format.creditRating(creditScore);
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="metric-card gold">
+      <div class="metric-label">Wallet Balance</div>
+      <div class="metric-value">${Format.currency(user.wallet)}</div>
+      <div class="metric-change up">💳 Available funds</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">Total Borrowed</div>
+      <div class="metric-value">${Format.currency(user.totalBorrowed||0)}</div>
+      <div class="metric-change">${loans.length} loan${loans.length!==1?'s':''} taken</div>
+    </div>
+    <div class="metric-card blue">
+      <div class="metric-label">Total Repaid</div>
+      <div class="metric-value">${Format.currency(user.totalRepaid||0)}</div>
+      <div class="metric-change up">✅ ${repaymentRate}% repayment rate</div>
+    </div>
+    <div class="metric-card purple">
+      <div class="metric-label">Credit Score</div>
+      <div class="metric-value" style="color:${cr.color}">${creditScore}</div>
+      <div class="metric-change" style="color:${cr.color}">${cr.label}</div>
+    </div>
+  `;
+
+  // Transaction volume chart
+  const txnsByDay = groupTransactionsByDay(txns, days);
+  renderVolumeChart(txnsByDay);
+
+  // Loan status donut
+  const statusGroups = {
+    active: loans.filter(l=>l.status==='active').length,
+    completed: loans.filter(l=>l.status==='completed').length,
+    pending: loans.filter(l=>l.status==='pending').length,
+    approved: loans.filter(l=>l.status==='approved').length,
+    rejected: loans.filter(l=>l.status==='rejected').length,
+  };
+  renderLoanDonut(statusGroups);
+
+  // Repayment trend
+  document.getElementById('chart2Title').textContent = 'EMI Payment History';
+  document.getElementById('chart2Subtitle').textContent = 'Monthly EMI payments made';
+  const emiByMonth = groupEMIByMonth(txns.filter(t => t.type === 'emi_paid'));
+  renderRepaymentChart(emiByMonth, 'EMI Paid (₹)', '#22C55E');
+
+  // Credit score gauge
+  document.getElementById('chart3Title').textContent = 'Credit Score Trend';
+  document.getElementById('chart3Subtitle').textContent = 'Score movement over time';
+  renderCreditTrend(creditHistory);
+
+  // Insights
+  const insights = generateBorrowerInsights(user, loans, creditScore, repaymentRate);
+  renderInsights(insights);
+
+  // Activity
+  renderActivity(txns.slice(0, 8));
+}
+
+// ========================
+// LENDER ANALYTICS
+// ========================
+async function loadLenderAnalytics(days) {
+  const [walletRes, loansRes, txnRes] = await Promise.all([
+    api.get('/users/wallet'),
+    api.get('/loans?status=active,completed,funded'),
+    api.get('/users/transactions?limit=100'),
+  ]);
+
+  const user = walletRes.data?.user || {};
+  const loans = loansRes.data?.loans || [];
+  const txns = txnRes.data?.transactions || [];
+
+  const myLoans = loans.filter(l => l.lender && (l.lender._id === currentUser.id || l.lender === currentUser.id));
+  const pnl = (user.totalReturns||0) - (user.totalFunded||0);
+  const roi = user.totalFunded > 0 ? ((pnl / user.totalFunded) * 100).toFixed(1) : 0;
+  const emiReceived = txns.filter(t => t.type==='emi_received').reduce((s,t)=>s+t.amount,0);
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="metric-card gold">
+      <div class="metric-label">Total Funded</div>
+      <div class="metric-value">${Format.currency(user.totalFunded||0)}</div>
+      <div class="metric-change">${myLoans.length} loans in portfolio</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">Total Returns</div>
+      <div class="metric-value">${Format.currency(user.totalReturns||0)}</div>
+      <div class="metric-change up">📥 EMIs + principal</div>
+    </div>
+    <div class="metric-card ${pnl>=0?'blue':'red'}">
+      <div class="metric-label">Net P&L</div>
+      <div class="metric-value" style="color:${pnl>=0?'var(--success)':'var(--danger)'}">${pnl>=0?'+':''}${Format.currency(pnl)}</div>
+      <div class="metric-change ${pnl>=0?'up':'down'}">${roi}% ROI</div>
+    </div>
+    <div class="metric-card purple">
+      <div class="metric-label">Wallet Balance</div>
+      <div class="metric-value">${Format.currency(user.wallet)}</div>
+      <div class="metric-change up">Available to invest</div>
+    </div>
+  `;
+
+  const txnsByDay = groupTransactionsByDay(txns, days);
+  renderVolumeChart(txnsByDay);
+
+  const statusGroups = {
+    active: myLoans.filter(l=>l.status==='active').length,
+    completed: myLoans.filter(l=>l.status==='completed').length,
+  };
+  renderLoanDonut(statusGroups);
+
+  document.getElementById('chart2Title').textContent = 'EMI Receipts';
+  document.getElementById('chart2Subtitle').textContent = 'Monthly EMI income received';
+  const emiByMonth = groupEMIByMonth(txns.filter(t => t.type === 'emi_received'));
+  renderRepaymentChart(emiByMonth, 'EMI Received (₹)', '#D4A853');
+
+  document.getElementById('chart3Title').textContent = 'Portfolio Returns';
+  document.getElementById('chart3Subtitle').textContent = 'Cumulative return over time';
+  renderCumulativeReturns(txns.filter(t=>t.type==='emi_received'));
+
+  const insights = generateLenderInsights(user, myLoans, pnl, roi);
+  renderInsights(insights);
+  renderActivity(txns.slice(0, 8));
+}
+
+// ========================
+// ADMIN ANALYTICS
+// ========================
+async function loadAdminAnalytics(days) {
+  const statsRes = await api.get('/admin/stats');
+  if (!statsRes.ok) { document.getElementById('kpiGrid').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-title">Failed to load</div></div>'; return; }
+
+  const stats = statsRes.data.stats;
+  const loanStats = stats.loanStats || [];
+  const totalLoans = loanStats.reduce((s,l) => s+l.count, 0);
+  const activeLoans = loanStats.find(l=>l._id==='active')?.count||0;
+  const completedLoans = loanStats.find(l=>l._id==='completed')?.count||0;
+  const repaymentRate = (totalLoans > 0) ? Math.round(((activeLoans+completedLoans)/totalLoans)*100) : 0;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="metric-card gold">
+      <div class="metric-label">Total Users</div>
+      <div class="metric-value">${stats.totalUsers}</div>
+      <div class="metric-change">${stats.totalBorrowers} borrowers · ${stats.totalLenders} lenders</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">Total Disbursed</div>
+      <div class="metric-value">${Format.currency(stats.totalDisbursed)}</div>
+      <div class="metric-change up">${activeLoans} active loans</div>
+    </div>
+    <div class="metric-card blue">
+      <div class="metric-label">Total Repaid</div>
+      <div class="metric-value">${Format.currency(stats.totalRepaid)}</div>
+      <div class="metric-change up">✅ ${repaymentRate}% portfolio health</div>
+    </div>
+    <div class="metric-card purple">
+      <div class="metric-label">Total Loans</div>
+      <div class="metric-value">${totalLoans}</div>
+      <div class="metric-change">${completedLoans} completed</div>
+    </div>
+  `;
+
+  // Volume chart from recent transactions
+  const txns = stats.recentTransactions || [];
+  const txnsByDay = groupTransactionsByDay(txns, days);
+  renderVolumeChart(txnsByDay);
+
+  // Loan status donut
+  const statusGroups = {};
+  loanStats.forEach(s => { statusGroups[s._id] = s.count; });
+  renderLoanDonut(statusGroups);
+
+  // Monthly totals bar
+  document.getElementById('chart2Title').textContent = 'Platform Flow';
+  document.getElementById('chart2Subtitle').textContent = 'Disbursed vs Repaid comparison';
+  renderPlatformFlow(stats);
+
+  // User growth
+  document.getElementById('chart3Title').textContent = 'Platform Health';
+  document.getElementById('chart3Subtitle').textContent = 'Portfolio quality metrics';
+  renderPlatformHealth(stats, loanStats);
+
+  const insights = generateAdminInsights(stats, loanStats);
+  renderInsights(insights);
+  renderActivity(txns.slice(0, 8));
+}
+
+// ========================
+// CHART RENDERERS
+// ========================
+function renderVolumeChart(data) {
+  const ctx = document.getElementById('volumeChart')?.getContext('2d');
+  if (!ctx) return;
+  charts.volume = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        { label: 'Credits', data: data.credits, borderColor: '#22C55E', backgroundColor: 'rgba(34,197,94,0.08)', fill: true, tension: 0.4, pointRadius: 3 },
+        { label: 'Debits', data: data.debits, borderColor: '#D4A853', backgroundColor: 'rgba(212,168,83,0.08)', fill: true, tension: 0.4, pointRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { boxWidth: 10, padding: 16, font: { size: 11 } } } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 }, callback: v => '₹' + (v>=1000 ? (v/1000).toFixed(0)+'K' : v) } }
+      }
+    }
+  });
+}
+
+function renderLoanDonut(groups) {
+  const entries = Object.entries(groups).filter(([,v]) => v > 0);
+  const total = entries.reduce((s,[,v]) => s+v, 0);
+  const colors = { active:'#22C55E', completed:'#3B82F6', pending:'#F59E0B', approved:'#D4A853', rejected:'#EF4444', funded:'#A855F7' };
+  const labels = entries.map(([k]) => k);
+  const data = entries.map(([,v]) => v);
+
+  const ctx = document.getElementById('loanDonut')?.getContext('2d');
+  if (!ctx) return;
+  charts.donut = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: labels.map(l => colors[l]||'#64748B'), borderWidth: 0, hoverOffset: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '70%',
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  document.getElementById('donutLegend').innerHTML = entries.map(([k,v]) => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${colors[k]||'#64748B'}"></div>
+      <span class="legend-label">${k.charAt(0).toUpperCase()+k.slice(1)}</span>
+      <span class="legend-val">${v} (${total>0?Math.round(v/total*100):0}%)</span>
+    </div>
+  `).join('');
+}
+
+function renderRepaymentChart(data, label, color) {
+  const ctx = document.getElementById('repaymentChart')?.getContext('2d');
+  if (!ctx) return;
+  charts.repayment = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [{ label, data: data.values, backgroundColor: color + '99', borderColor: color, borderWidth: 1, borderRadius: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 }, callback: v => '₹' + (v>=1000?(v/1000).toFixed(0)+'K':v) } }
+      }
+    }
+  });
+}
+
+function renderCreditTrend(history) {
+  const ctx = document.getElementById('gaugeChart')?.getContext('2d');
+  if (!ctx) return;
+  const recent = history.slice(-12);
+  if (recent.length === 0) {
+    ctx.canvas.style.display = 'none';
+    ctx.canvas.parentElement.innerHTML += '<div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">No history yet</div><div class="empty-state-text">Make loan payments to see trends</div></div>';
+    return;
+  }
+  charts.gauge = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: recent.map(h => Format.date(h.date, 'short')),
+      datasets: [{ label: 'Credit Score', data: recent.map(h => h.score), borderColor: '#D4A853', backgroundColor: 'rgba(212,168,83,0.1)', fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#D4A853' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { min: 300, max: 850, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderCumulativeReturns(emiTxns) {
+  const ctx = document.getElementById('gaugeChart')?.getContext('2d');
+  if (!ctx || !emiTxns.length) return;
+  const byMonth = groupEMIByMonth(emiTxns);
+  let cumulative = 0;
+  const cumValues = byMonth.values.map(v => { cumulative += v; return Math.round(cumulative); });
+  charts.gauge = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: byMonth.labels,
+      datasets: [{ label: 'Cumulative Returns', data: cumValues, borderColor: '#22C55E', backgroundColor: 'rgba(34,197,94,0.1)', fill: true, tension: 0.4, pointRadius: 3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 10 }, callback: v => '₹'+(v>=1000?(v/1000).toFixed(0)+'K':v) } }
+      }
+    }
+  });
+}
+
+function renderPlatformFlow(stats) {
+  const ctx = document.getElementById('repaymentChart')?.getContext('2d');
+  if (!ctx) return;
+  charts.repayment = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Platform'],
+      datasets: [
+        { label: 'Disbursed', data: [stats.totalDisbursed], backgroundColor: '#D4A85399', borderColor: '#D4A853', borderWidth:1, borderRadius:6 },
+        { label: 'Repaid', data: [stats.totalRepaid], backgroundColor: '#22C55E99', borderColor: '#22C55E', borderWidth:1, borderRadius:6 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { position: 'top', labels: { boxWidth: 10, font: { size: 11 } } } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { callback: v => '₹'+(v>=1000?(v/1000).toFixed(0)+'K':v) } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderPlatformHealth(stats, loanStats) {
+  const ctx = document.getElementById('gaugeChart')?.getContext('2d');
+  if (!ctx) return;
+  const statuses = ['pending','approved','active','completed','rejected'];
+  const colors = {'pending':'#F59E0B','approved':'#D4A853','active':'#22C55E','completed':'#3B82F6','rejected':'#EF4444'};
+  charts.gauge = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: statuses.map(s => s.charAt(0).toUpperCase()+s.slice(1)),
+      datasets: [{
+        data: statuses.map(s => loanStats.find(l=>l._id===s)?.count||0),
+        backgroundColor: statuses.map(s => colors[s]+'99'),
+        borderColor: statuses.map(s => colors[s]),
+        borderWidth: 1, borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+}
+
+// ========================
+// DATA HELPERS
+// ========================
+function groupTransactionsByDay(txns, days) {
+  const now = new Date();
+  const labels = [], credits = [], debits = [];
+  for (let i = Math.min(days, 14) - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const dayStr = d.toDateString();
+    const dayTxns = txns.filter(t => new Date(t.createdAt).toDateString() === dayStr);
+    labels.push(label);
+    credits.push(dayTxns.filter(t=>t.direction==='credit').reduce((s,t)=>s+t.amount,0));
+    debits.push(dayTxns.filter(t=>t.direction==='debit').reduce((s,t)=>s+t.amount,0));
+  }
+  return { labels, credits, debits };
+}
+
+function groupEMIByMonth(txns) {
+  const map = {};
+  txns.forEach(t => {
+    const d = new Date(t.createdAt);
+    const key = d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+    map[key] = (map[key]||0) + t.amount;
+  });
+  const labels = Object.keys(map).slice(-6);
+  const values = labels.map(l => Math.round(map[l]));
+  return { labels, values };
+}
+
+// ========================
+// INSIGHTS GENERATORS
+// ========================
+function generateBorrowerInsights(user, loans, creditScore, repaymentRate) {
+  const insights = [];
+  if (creditScore >= 750) insights.push({ icon: '⭐', color: 'gold', title: 'Excellent Credit', desc: 'Your score qualifies you for premium loan rates below 10% p.a.' });
+  else if (creditScore < 600) insights.push({ icon: '⚠️', color: 'red', title: 'Build Your Credit', desc: 'Pay existing EMIs on time to improve your score by 5 points per payment.' });
+  else insights.push({ icon: '📈', color: 'blue', title: 'Growing Creditworthiness', desc: 'You\'re on track. Consistent payments will push you above 750 in 3-4 months.' });
+
+  const activeLoans = loans.filter(l=>l.status==='active');
+  if (activeLoans.length === 0) insights.push({ icon: '💡', color: 'gold', title: 'Ready to Borrow', desc: 'Apply for a loan now. With your credit score, you can get competitive rates.' });
+  if (repaymentRate === 100) insights.push({ icon: '🏆', color: 'green', title: 'Perfect Repayment', desc: '100% repayment rate! Lenders trust borrowers with your track record.' });
+  if ((user.wallet||0) < 2000) insights.push({ icon: '💳', color: 'red', title: 'Low Wallet Balance', desc: 'Top up your wallet before your next EMI to avoid missed payment penalties.' });
+  return insights;
+}
+
+function generateLenderInsights(user, loans, pnl, roi) {
+  const insights = [];
+  if (pnl > 0) insights.push({ icon: '💹', color: 'green', title: 'Profitable Portfolio', desc: `You've earned ${Format.currency(pnl)} in returns — ${roi}% ROI on deployed capital.` });
+  if (loans.filter(l=>l.status==='active').length === 0) insights.push({ icon: '🔍', color: 'gold', title: 'Diversify Now', desc: 'Fund multiple loans across risk categories to build steady income flow.' });
+  if ((user.wallet||0) > 50000) insights.push({ icon: '💡', color: 'blue', title: 'Idle Capital Detected', desc: `${Format.currency(user.wallet)} is sitting unused. Deploy it to earn returns.` });
+  if (loans.length >= 3) insights.push({ icon: '🛡️', color: 'green', title: 'Well Diversified', desc: 'Your multi-loan portfolio reduces single-borrower default risk.' });
+  return insights;
+}
+
+function generateAdminInsights(stats, loanStats) {
+  const insights = [];
+  const pending = loanStats.find(l=>l._id==='pending')?.count||0;
+  const repaymentRatio = stats.totalDisbursed > 0 ? Math.round((stats.totalRepaid/stats.totalDisbursed)*100) : 0;
+  if (pending > 0) insights.push({ icon: '⏳', color: 'gold', title: `${pending} Loans Awaiting Review`, desc: 'Approve or reject pending applications to keep the pipeline moving.' });
+  if (repaymentRatio >= 80) insights.push({ icon: '✅', color: 'green', title: 'Healthy Repayment Rate', desc: `${repaymentRatio}% of disbursed capital has been repaid — platform is performing well.` });
+  else if (repaymentRatio < 50) insights.push({ icon: '⚠️', color: 'red', title: 'Repayment Rate Concern', desc: `Only ${repaymentRatio}% repaid. Review active loans and follow up with borrowers.` });
+  if (stats.totalUsers > 0) insights.push({ icon: '👥', color: 'blue', title: 'Platform Growing', desc: `${stats.totalBorrowers} borrowers and ${stats.totalLenders} lenders registered on platform.` });
+  return insights;
+}
+
+function renderInsights(insights) {
+  if (!insights.length) { document.getElementById('insightsPanel').innerHTML = '<div class="empty-state"><div class="empty-state-icon">💡</div><div class="empty-state-title">No insights yet</div></div>'; return; }
+  document.getElementById('insightsPanel').innerHTML = insights.slice(0,4).map(i => `
+    <div class="insight-item">
+      <div class="insight-icon ${i.color}">${i.icon}</div>
+      <div>
+        <div class="insight-title">${i.title}</div>
+        <div class="insight-desc">${i.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderActivity(txns) {
+  const icons = { topup:'💳', loan_funded:'💸', loan_received:'🏦', emi_paid:'📤', emi_received:'📥', refund:'↩️' };
+  if (!txns.length) { document.getElementById('activityPanel').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No activity yet</div></div>'; return; }
+  document.getElementById('activityPanel').innerHTML = txns.map(t => `
+    <div class="txn-item">
+      <div class="txn-icon ${t.direction}">${icons[t.type]||'💰'}</div>
+      <div class="txn-info">
+        <div class="txn-desc">${t.description}</div>
+        <div class="txn-date">${Format.timeAgo(t.createdAt)}</div>
+      </div>
+      <div class="txn-amount ${t.direction}">${t.direction==='credit'?'+':'-'}${Format.currency(t.amount)}</div>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>

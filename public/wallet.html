@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wallet — MicroFund</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+<div class="page-bg"></div>
+<div class="app-layout">
+  <div id="sidebarContainer"></div>
+  <div class="main-content">
+    <div id="topbarContainer"></div>
+    <div class="page-content">
+      <div class="page-header"><h1 class="page-title">My Wallet</h1><div class="page-subtitle">Manage funds and track all transactions</div></div>
+      <div class="wallet-hero mb-24">
+        <div style="position:relative;z-index:1">
+          <div class="wallet-label">Available Balance</div>
+          <div class="wallet-balance" id="walletBalanceLarge">₹—</div>
+          <div class="wallet-sub" id="walletSubtext">Loading...</div>
+          <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">
+            <button class="btn" style="background:rgba(11,22,40,0.3);color:white;backdrop-filter:blur(4px)" onclick="Modal.open('topupModal')">➕ Top Up Wallet</button>
+            <button class="btn" style="background:rgba(11,22,40,0.2);color:rgba(255,255,255,0.8);backdrop-filter:blur(4px)" onclick="openEMICalculator()">🧮 EMI Calculator</button>
+          </div>
+        </div>
+      </div>
+      <div class="grid-3 mb-24" id="walletStats"><div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div></div></div>
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Transaction History</div><div class="card-subtitle">All credits and debits</div></div>
+          <select id="txnFilter" class="form-input form-select" style="width:auto;padding:6px 12px;font-size:12px" onchange="loadTransactions()">
+            <option value="">All Types</option>
+            <option value="topup">Top-Up</option>
+            <option value="loan_funded">Loans Funded</option>
+            <option value="loan_received">Loans Received</option>
+            <option value="emi_paid">EMI Paid</option>
+            <option value="emi_received">EMI Received</option>
+          </select>
+        </div>
+        <div class="card-body">
+          <div id="transactionList"><div class="loading-state"><div class="spinner"></div></div></div>
+          <div style="text-align:center;margin-top:16px"><button class="btn btn-ghost btn-sm" id="loadMoreBtn" onclick="loadMoreTransactions()" style="display:none">Load More</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Top-Up Modal (Razorpay UPI) -->
+<div class="modal-overlay" id="topupModal">
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Add Funds via UPI</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:4px">
+          Powered by Razorpay · Test Mode
+        </div>
+      </div>
+      <button class="modal-close" onclick="Modal.close('topupModal')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Quick Amount Buttons -->
+      <div style="margin-bottom:16px">
+        <label class="form-label">Select Amount</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <button onclick="setTopupAmount(500)"  class="amount-btn" id="amt-500">₹500</button>
+          <button onclick="setTopupAmount(1000)" class="amount-btn" id="amt-1000">₹1,000</button>
+          <button onclick="setTopupAmount(5000)" class="amount-btn" id="amt-5000">₹5,000</button>
+          <button onclick="setTopupAmount(10000)" class="amount-btn" id="amt-10000">₹10,000</button>
+          <button onclick="setTopupAmount(25000)" class="amount-btn" id="amt-25000">₹25,000</button>
+          <button onclick="setTopupAmount(50000)" class="amount-btn" id="amt-50000">₹50,000</button>
+        </div>
+      </div>
+
+      <!-- Custom Amount -->
+      <div class="form-group">
+        <label class="form-label">Or enter custom amount (₹)</label>
+        <input type="number" id="topupAmount" class="form-input"
+          placeholder="Min ₹1, Max ₹1,00,000"
+          min="1" max="100000"
+          oninput="clearAmountSelection()">
+      </div>
+
+      <!-- UPI Note -->
+      <div style="background:rgba(212,168,83,0.08);border:1px solid rgba(212,168,83,0.15);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+        🧪 <strong style="color:var(--gold)">Test Mode:</strong> Use UPI ID
+        <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;color:var(--text-primary)">success@razorpay</code>
+        to simulate a successful payment.
+      </div>
+
+      <div id="topupError" style="color:var(--danger);font-size:13px;margin-bottom:12px;display:none"></div>
+      <button class="btn btn-primary w-full btn-lg" onclick="initiateRazorpayPayment()" id="topupBtn">
+        Pay via UPI →
+      </button>
+
+      <!-- Powered by -->
+      <div style="text-align:center;margin-top:12px;font-size:11px;color:var(--text-muted)">
+        Secured by
+        <img src="https://razorpay.com/favicon.ico" style="width:12px;height:12px;vertical-align:middle;margin:0 3px">
+        Razorpay
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="emiModalContainer"></div>
+<div class="toast-container"></div>
+<script src="/js/common.js"></script>
+<script src="/js/layout.js"></script>
+<script>
+let currentUser = null, txnPage = 1, totalTxns = 0, allTxns = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  currentUser = initPage('wallet');
+  if (!currentUser) return;
+  document.getElementById('sidebarContainer').innerHTML = getSidebarHTML();
+  document.getElementById('topbarContainer').innerHTML = getTopbarHTML('Wallet');
+  document.getElementById('emiModalContainer').innerHTML = getEMIModalHTML();
+  initPageControls('wallet');
+  Modal.closeOnOverlay('topupModal');
+  Modal.closeOnOverlay('emiCalcModal');
+  await loadWalletData();
+});
+
+async function loadWalletData() {
+  const walletRes = await api.get('/users/wallet');
+  const user = walletRes.data?.user || {};
+  const wallet = user.wallet || 0;
+  document.getElementById('walletBalanceLarge').textContent = Format.currency(wallet);
+  document.getElementById('walletSubtext').textContent = (user.name||'—') + ' · ' + (user.role||'');
+  document.getElementById('topbarWallet').textContent = Format.currency(wallet);
+
+  let statsHTML = '';
+  if (currentUser.role === 'borrower') {
+    statsHTML = `
+      <div class="stat-card blue"><div class="stat-icon">💸</div><div class="stat-label">Total Borrowed</div><div class="stat-value">${Format.currency(user.totalBorrowed)}</div><div class="stat-change">Cumulative disbursed</div></div>
+      <div class="stat-card green"><div class="stat-icon">✅</div><div class="stat-label">Total Repaid</div><div class="stat-value">${Format.currency(user.totalRepaid)}</div><div class="stat-change positive">Principal + Interest</div></div>
+      <div class="stat-card"><div class="stat-icon">📋</div><div class="stat-label">Active Loans</div><div class="stat-value">${user.activeLoansCount||0}</div><div class="stat-change">Currently repaying</div></div>
+    `;
+  } else if (currentUser.role === 'lender') {
+    const pnl = (user.totalReturns||0) - (user.totalFunded||0);
+    statsHTML = `
+      <div class="stat-card blue"><div class="stat-icon">💰</div><div class="stat-label">Total Funded</div><div class="stat-value">${Format.currency(user.totalFunded)}</div><div class="stat-change">Deployed capital</div></div>
+      <div class="stat-card green"><div class="stat-icon">📈</div><div class="stat-label">Total Returns</div><div class="stat-value">${Format.currency(user.totalReturns)}</div><div class="stat-change positive">EMIs received</div></div>
+      <div class="stat-card ${pnl>=0?'green':'red'}"><div class="stat-icon">${pnl>=0?'🟢':'🔴'}</div><div class="stat-label">Net P&L</div><div class="stat-value" style="color:${pnl>=0?'var(--success)':'var(--danger)'}">${pnl>=0?'+':''}${Format.currency(pnl)}</div><div class="stat-change">Returns - Invested</div></div>
+    `;
+  } else {
+    statsHTML = `<div class="stat-card gold"><div class="stat-icon">💳</div><div class="stat-label">Admin Balance</div><div class="stat-value">${Format.currency(wallet)}</div></div>`;
+  }
+  document.getElementById('walletStats').innerHTML = statsHTML;
+  await loadTransactions();
+}
+
+async function loadTransactions(reset = true) {
+  if (reset) { txnPage = 1; allTxns = []; }
+  const type = document.getElementById('txnFilter').value;
+  const res = await api.get('/users/transactions?page='+txnPage+'&limit=15'+(type?'&type='+type:''));
+  if (!res.ok) { document.getElementById('transactionList').innerHTML = '<div class="empty-state"><div class="empty-state-title">Failed to load</div></div>'; return; }
+  totalTxns = res.data.total;
+  allTxns = reset ? res.data.transactions : [...allTxns, ...res.data.transactions];
+  renderTransactions();
+  document.getElementById('loadMoreBtn').style.display = allTxns.length < totalTxns ? 'inline-flex' : 'none';
+}
+
+function renderTransactions() {
+  const icons = {topup:'💳',loan_funded:'💸',loan_received:'🏦',emi_paid:'📤',emi_received:'📥',refund:'↩️'};
+  if (!allTxns.length) {
+    document.getElementById('transactionList').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No transactions yet</div><div class="empty-state-text">Your history appears here</div><button onclick="Modal.open(\'topupModal\')" class="btn btn-primary btn-sm" style="margin-top:16px">Add Funds</button></div>';
+    return;
+  }
+  document.getElementById('transactionList').innerHTML = allTxns.map(t=>`
+    <div class="txn-item">
+      <div class="txn-icon ${t.direction}">${icons[t.type]||'💰'}</div>
+      <div class="txn-info"><div class="txn-desc">${t.description}</div><div class="txn-date">${Format.date(t.createdAt,'datetime')} · ${t.reference||'—'}</div></div>
+      <div style="text-align:right">
+        <div class="txn-amount ${t.direction}">${t.direction==='credit'?'+':'-'}${Format.currency(t.amount)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Bal: ${Format.currency(t.balanceAfter)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadMoreTransactions() { txnPage++; await loadTransactions(false); }
+let selectedAmount = 0;
+
+function setTopupAmount(amount) {
+  selectedAmount = amount;
+  document.getElementById('topupAmount').value = '';
+  document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('amt-' + amount)?.classList.add('selected');
+}
+
+function clearAmountSelection() {
+  selectedAmount = 0;
+  document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+}
+
+async function initiateRazorpayPayment() {
+  const customAmount = parseFloat(document.getElementById('topupAmount').value);
+  const amount = selectedAmount || customAmount;
+  const errorEl = document.getElementById('topupError');
+  const btn = document.getElementById('topupBtn');
+
+  errorEl.style.display = 'none';
+
+  if (!amount || amount < 1) {
+    errorEl.textContent = 'Please select or enter an amount';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (amount > 100000) {
+    errorEl.textContent = 'Maximum ₹1,00,000 per transaction';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  btn.textContent = 'Creating order...';
+  btn.disabled = true;
+
+  // Step 1: Create order on backend
+  const orderRes = await api.post('/payments/create-order', { amount });
+  if (!orderRes.ok) {
+    errorEl.textContent = orderRes.data.message || 'Failed to initiate payment';
+    errorEl.style.display = 'block';
+    btn.textContent = 'Pay via UPI →';
+    btn.disabled = false;
+    return;
+  }
+
+  const { orderId, keyId } = orderRes.data;
+  const user = Auth.getUser();
+
+  // Step 2: Open Razorpay checkout
+  const options = {
+    key: keyId,
+    amount: Math.round(amount * 100), // paise
+    currency: 'INR',
+    name: 'MicroFund',
+    description: 'Wallet Top-Up',
+    image: '', // optional logo URL
+    order_id: orderId,
+    prefill: {
+      name: user.name,
+      email: user.email,
+      contact: user.phone || '',
+    },
+    method: {
+      upi: true,       // enable UPI
+      card: false,     // disable card
+      netbanking: false,
+      wallet: false,
+      emi: false,
+    },
+    config: {
+      display: {
+        blocks: {
+          utib: { name: 'Pay via UPI', instruments: [{ method: 'upi' }] },
+        },
+        sequence: ['block.utib'],
+        preferences: { show_default_blocks: false },
+      },
+    },
+    theme: { color: '#D4A853' },
+
+    // Payment successful
+    handler: async function (response) {
+      btn.textContent = 'Verifying...';
+      const verifyRes = await api.post('/payments/verify', {
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
+        amount: Math.round(amount * 100),
+      });
+
+      if (verifyRes.ok) {
+        Toast.success('₹' + amount + ' added!', 'Wallet credited via UPI');
+        Modal.close('topupModal');
+        selectedAmount = 0;
+        document.querySelectorAll('.amount-btn').forEach(b => b.classList.remove('selected'));
+        document.getElementById('topupAmount').value = '';
+        await loadWalletData();
+        refreshWalletDisplay();
+      } else {
+        Toast.error('Verification failed', verifyRes.data.message);
+      }
+      btn.textContent = 'Pay via UPI →';
+      btn.disabled = false;
+    },
+
+    // Payment failed or dismissed
+    modal: {
+      ondismiss: function () {
+        Toast.warning('Payment cancelled', 'No funds were deducted');
+        btn.textContent = 'Pay via UPI →';
+        btn.disabled = false;
+      },
+    },
+  };
+
+  const rzp = new Razorpay(options);
+
+  rzp.on('payment.failed', function (response) {
+    Toast.error('Payment failed', response.error.description);
+    btn.textContent = 'Pay via UPI →';
+    btn.disabled = false;
+  });
+
+  rzp.open();
+}
+</script>
+</body>
+</html>
